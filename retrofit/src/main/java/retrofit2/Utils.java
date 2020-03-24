@@ -20,12 +20,14 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.GenericDeclaration;
+import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.util.Arrays;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import javax.annotation.Nullable;
 import okhttp3.ResponseBody;
 import okio.Buffer;
@@ -37,8 +39,31 @@ final class Utils {
     // No instances.
   }
 
+  static RuntimeException methodError(Method method, String message, Object... args) {
+    return methodError(method, null, message, args);
+  }
+
+  static RuntimeException methodError(Method method, @Nullable Throwable cause, String message,
+      Object... args) {
+    message = String.format(message, args);
+    return new IllegalArgumentException(message
+        + "\n    for method "
+        + method.getDeclaringClass().getSimpleName()
+        + "."
+        + method.getName(), cause);
+  }
+
+  static RuntimeException parameterError(Method method,
+      Throwable cause, int p, String message, Object... args) {
+    return methodError(method, cause, message + " (parameter #" + (p + 1) + ")", args);
+  }
+
+  static RuntimeException parameterError(Method method, int p, String message, Object... args) {
+    return methodError(method, message + " (parameter #" + (p + 1) + ")", args);
+  }
+
   static Class<?> getRawType(Type type) {
-    checkNotNull(type, "type == null");
+    Objects.requireNonNull(type, "type == null");
 
     if (type instanceof Class<?>) {
       // Type is a normal class.
@@ -82,7 +107,9 @@ final class Utils {
       if (!(b instanceof ParameterizedType)) return false;
       ParameterizedType pa = (ParameterizedType) a;
       ParameterizedType pb = (ParameterizedType) b;
-      return equal(pa.getOwnerType(), pb.getOwnerType())
+      Object ownerA = pa.getOwnerType();
+      Object ownerB = pb.getOwnerType();
+      return (ownerA == ownerB || (ownerA != null && ownerA.equals(ownerB)))
           && pa.getRawType().equals(pb.getRawType())
           && Arrays.equals(pa.getActualTypeArguments(), pb.getActualTypeArguments());
 
@@ -153,14 +180,6 @@ final class Utils {
       if (toFind.equals(array[i])) return i;
     }
     throw new NoSuchElementException();
-  }
-
-  private static boolean equal(Object a, Object b) {
-    return a == b || (a != null && a.equals(b));
-  }
-
-  static int hashCodeOrZero(Object o) {
-    return o != null ? o.hashCode() : 0;
   }
 
   static String typeToString(Type type) {
@@ -270,7 +289,7 @@ final class Utils {
    * Returns the declaring class of {@code typeVariable}, or {@code null} if it was not declared by
    * a class.
    */
-  private static Class<?> declaringClassOf(TypeVariable<?> typeVariable) {
+  private static @Nullable Class<?> declaringClassOf(TypeVariable<?> typeVariable) {
     GenericDeclaration genericDeclaration = typeVariable.getGenericDeclaration();
     return genericDeclaration instanceof Class ? (Class<?>) genericDeclaration : null;
   }
@@ -279,13 +298,6 @@ final class Utils {
     if (type instanceof Class<?> && ((Class<?>) type).isPrimitive()) {
       throw new IllegalArgumentException();
     }
-  }
-
-  static <T> T checkNotNull(@Nullable T object, String message) {
-    if (object == null) {
-      throw new NullPointerException(message);
-    }
-    return object;
   }
 
   /** Returns true if {@code annotations} contains an instance of {@code cls}. */
@@ -305,18 +317,6 @@ final class Utils {
     return ResponseBody.create(body.contentType(), body.contentLength(), buffer);
   }
 
-  static <T> void validateServiceInterface(Class<T> service) {
-    if (!service.isInterface()) {
-      throw new IllegalArgumentException("API declarations must be interfaces.");
-    }
-    // Prevent API interfaces from extending other interfaces. This not only avoids a bug in
-    // Android (http://b.android.com/58753) but it forces composition of API declarations which is
-    // the recommended pattern.
-    if (service.getInterfaces().length > 0) {
-      throw new IllegalArgumentException("API interfaces must not extend other interfaces.");
-    }
-  }
-
   static Type getParameterUpperBound(int index, ParameterizedType type) {
     Type[] types = type.getActualTypeArguments();
     if (index < 0 || index >= types.length) {
@@ -330,7 +330,15 @@ final class Utils {
     return paramType;
   }
 
-  static boolean hasUnresolvableType(Type type) {
+  static Type getParameterLowerBound(int index, ParameterizedType type) {
+    Type paramType = type.getActualTypeArguments()[index];
+    if (paramType instanceof WildcardType) {
+      return ((WildcardType) paramType).getLowerBounds()[0];
+    }
+    return paramType;
+  }
+
+  static boolean hasUnresolvableType(@Nullable Type type) {
     if (type instanceof Class<?>) {
       return false;
     }
@@ -357,20 +365,12 @@ final class Utils {
         + "GenericArrayType, but <" + type + "> is of type " + className);
   }
 
-  static Type getCallResponseType(Type returnType) {
-    if (!(returnType instanceof ParameterizedType)) {
-      throw new IllegalArgumentException(
-          "Call return type must be parameterized as Call<Foo> or Call<? extends Foo>");
-    }
-    return getParameterUpperBound(0, (ParameterizedType) returnType);
-  }
-
-  private static final class ParameterizedTypeImpl implements ParameterizedType {
-    private final Type ownerType;
+  static final class ParameterizedTypeImpl implements ParameterizedType {
+    private final @Nullable Type ownerType;
     private final Type rawType;
     private final Type[] typeArguments;
 
-    ParameterizedTypeImpl(Type ownerType, Type rawType, Type... typeArguments) {
+    ParameterizedTypeImpl(@Nullable Type ownerType, Type rawType, Type... typeArguments) {
       // Require an owner type if the raw type needs it.
       if (rawType instanceof Class<?>
           && (ownerType == null) != (((Class<?>) rawType).getEnclosingClass() == null)) {
@@ -378,7 +378,7 @@ final class Utils {
       }
 
       for (Type typeArgument : typeArguments) {
-        checkNotNull(typeArgument, "typeArgument == null");
+        Objects.requireNonNull(typeArgument, "typeArgument == null");
         checkNotPrimitive(typeArgument);
       }
 
@@ -395,7 +395,7 @@ final class Utils {
       return rawType;
     }
 
-    @Override public Type getOwnerType() {
+    @Override public @Nullable Type getOwnerType() {
       return ownerType;
     }
 
@@ -404,7 +404,9 @@ final class Utils {
     }
 
     @Override public int hashCode() {
-      return Arrays.hashCode(typeArguments) ^ rawType.hashCode() ^ hashCodeOrZero(ownerType);
+      return Arrays.hashCode(typeArguments)
+          ^ rawType.hashCode()
+          ^ (ownerType != null ? ownerType.hashCode() : 0);
     }
 
     @Override public String toString() {
@@ -451,7 +453,7 @@ final class Utils {
    */
   private static final class WildcardTypeImpl implements WildcardType {
     private final Type upperBound;
-    private final Type lowerBound;
+    private final @Nullable Type lowerBound;
 
     WildcardTypeImpl(Type[] upperBounds, Type[] lowerBounds) {
       if (lowerBounds.length > 1) throw new IllegalArgumentException();
@@ -492,6 +494,18 @@ final class Utils {
       if (lowerBound != null) return "? super " + typeToString(lowerBound);
       if (upperBound == Object.class) return "?";
       return "? extends " + typeToString(upperBound);
+    }
+  }
+
+  // https://github.com/ReactiveX/RxJava/blob/6a44e5d0543a48f1c378dc833a155f3f71333bc2/
+  // src/main/java/io/reactivex/exceptions/Exceptions.java#L66
+  static void throwIfFatal(Throwable t) {
+    if (t instanceof VirtualMachineError) {
+      throw (VirtualMachineError) t;
+    } else if (t instanceof ThreadDeath) {
+      throw (ThreadDeath) t;
+    } else if (t instanceof LinkageError) {
+      throw (LinkageError) t;
     }
   }
 }

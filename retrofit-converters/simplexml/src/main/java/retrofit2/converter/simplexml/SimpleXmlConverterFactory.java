@@ -17,6 +17,7 @@ package retrofit2.converter.simplexml;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import javax.annotation.Nullable;
 import okhttp3.RequestBody;
 import okhttp3.ResponseBody;
 import org.simpleframework.xml.Serializer;
@@ -29,7 +30,10 @@ import retrofit2.Retrofit;
  * <p>
  * This converter only applies for class types. Parameterized types (e.g., {@code List<Foo>}) are
  * not handled.
+ *
+ * @deprecated we recommend switching to the JAXB converter.
  */
+@Deprecated
 public final class SimpleXmlConverterFactory extends Converter.Factory {
   /** Create an instance using a default {@link Persister} instance for conversion. */
   public static SimpleXmlConverterFactory create() {
@@ -75,8 +79,7 @@ public final class SimpleXmlConverterFactory extends Converter.Factory {
     return new SimpleXmlResponseBodyConverter<>(cls, serializer, strict);
   }
 
-  @Override
-  public Converter<?, RequestBody> requestBodyConverter(Type type,
+  @Override public @Nullable Converter<?, RequestBody> requestBodyConverter(Type type,
       Annotation[] parameterAnnotations, Annotation[] methodAnnotations, Retrofit retrofit) {
     if (!(type instanceof Class)) {
       return null;

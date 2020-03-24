@@ -18,14 +18,20 @@ package retrofit2.adapter.rxjava2;
 import io.reactivex.Completable;
 import io.reactivex.exceptions.CompositeException;
 import io.reactivex.exceptions.Exceptions;
-import io.reactivex.functions.Consumer;
 import io.reactivex.observers.TestObserver;
 import io.reactivex.plugins.RxJavaPlugins;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
+import okhttp3.Dispatcher;
+import okhttp3.OkHttpClient;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -36,7 +42,10 @@ import retrofit2.http.GET;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static okhttp3.mockwebserver.SocketPolicy.DISCONNECT_AFTER_REQUEST;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 public final class AsyncTest {
   @Rule public final MockWebServer server = new MockWebServer();
@@ -46,12 +55,28 @@ public final class AsyncTest {
   }
 
   private Service service;
+  private List<Throwable> uncaughtExceptions = new ArrayList<>();
+
   @Before public void setUp() {
+    ExecutorService executorService = Executors.newCachedThreadPool(r -> {
+      Thread thread = new Thread(r);
+      thread.setUncaughtExceptionHandler((t, e) -> uncaughtExceptions.add(e));
+      return thread;
+    });
+
+    OkHttpClient client = new OkHttpClient.Builder()
+        .dispatcher(new Dispatcher(executorService))
+        .build();
     Retrofit retrofit = new Retrofit.Builder()
         .baseUrl(server.url("/"))
+        .client(client)
         .addCallAdapterFactory(RxJava2CallAdapterFactory.createAsync())
         .build();
     service = retrofit.create(Service.class);
+  }
+
+  @After public void tearDown() {
+    assertTrue("Uncaught exceptions: " + uncaughtExceptions, uncaughtExceptions.isEmpty());
   }
 
   @Test public void success() throws InterruptedException {
@@ -80,13 +105,11 @@ public final class AsyncTest {
 
     final CountDownLatch latch = new CountDownLatch(1);
     final AtomicReference<Throwable> errorRef = new AtomicReference<>();
-    RxJavaPlugins.setErrorHandler(new Consumer<Throwable>() {
-      @Override public void accept(Throwable throwable) throws Exception {
-        if (!errorRef.compareAndSet(null, throwable)) {
-          throw Exceptions.propagate(throwable); // Don't swallow secondary errors!
-        }
-        latch.countDown();
+    RxJavaPlugins.setErrorHandler(throwable -> {
+      if (!errorRef.compareAndSet(null, throwable)) {
+        throw Exceptions.propagate(throwable); // Don't swallow secondary errors!
       }
+      latch.countDown();
     });
 
     TestObserver<Void> observer = new TestObserver<>();
@@ -106,13 +129,11 @@ public final class AsyncTest {
 
     final CountDownLatch latch = new CountDownLatch(1);
     final AtomicReference<Throwable> pluginRef = new AtomicReference<>();
-    RxJavaPlugins.setErrorHandler(new Consumer<Throwable>() {
-      @Override public void accept(Throwable throwable) throws Exception {
-        if (!pluginRef.compareAndSet(null, throwable)) {
-          throw Exceptions.propagate(throwable); // Don't swallow secondary errors!
-        }
-        latch.countDown();
+    RxJavaPlugins.setErrorHandler(throwable -> {
+      if (!pluginRef.compareAndSet(null, throwable)) {
+        throw Exceptions.propagate(throwable); // Don't swallow secondary errors!
       }
+      latch.countDown();
     });
 
     TestObserver<Void> observer = new TestObserver<>();
@@ -129,5 +150,24 @@ public final class AsyncTest {
     //noinspection ThrowableResultOfMethodCallIgnored
     CompositeException composite = (CompositeException) pluginRef.get();
     assertThat(composite.getExceptions()).containsExactly(errorRef.get(), e);
+  }
+
+  @Test public void bodyThrowingFatalInOnErrorPropagates() throws InterruptedException {
+    server.enqueue(new MockResponse().setResponseCode(404));
+
+    final CountDownLatch latch = new CountDownLatch(1);
+
+    TestObserver<Void> observer = new TestObserver<>();
+    final Error e = new OutOfMemoryError("Not real");
+    service.completable().subscribe(new ForwardingCompletableObserver(observer) {
+      @Override public void onError(Throwable throwable) {
+        throw e;
+      }
+    });
+
+    latch.await(1, SECONDS);
+
+    assertEquals(1, uncaughtExceptions.size());
+    assertSame(e, uncaughtExceptions.remove(0));
   }
 }

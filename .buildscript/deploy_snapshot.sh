@@ -3,10 +3,10 @@
 # Deploy a jar, source jar, and javadoc jar to Sonatype's snapshot repo.
 #
 # Adapted from https://coderwall.com/p/9b_lfq and
-# http://benlimmer.com/2013/12/26/automatically-publish-javadoc-to-gh-pages-with-travis-ci/
+# https://benlimmer.com/2013/12/26/automatically-publish-javadoc-to-gh-pages-with-travis-ci/
 
 SLUG="square/retrofit"
-JDK="oraclejdk8"
+JDK="openjdk8"
 BRANCH="master"
 
 set -e

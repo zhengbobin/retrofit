@@ -16,6 +16,7 @@
 package retrofit2;
 
 import okhttp3.Headers;
+import okhttp3.MediaType;
 import okhttp3.Protocol;
 import okhttp3.ResponseBody;
 import org.junit.Test;
@@ -77,6 +78,17 @@ public final class ResponseTest {
     }
   }
 
+  @Test public void successWithStatusCode() {
+    Object body = new Object();
+    Response<Object> response = Response.success(204, body);
+    assertThat(response.code()).isEqualTo(204);
+    assertThat(response.message()).isEqualTo("Response.success()");
+    assertThat(response.headers().size()).isZero();
+    assertThat(response.isSuccessful()).isTrue();
+    assertThat(response.body()).isSameAs(body);
+    assertThat(response.errorBody()).isNull();
+  }
+
   @Test public void successWithRawResponse() {
     Object body = new Object();
     Response<Object> response = Response.success(body, successResponse);
@@ -108,9 +120,17 @@ public final class ResponseTest {
   }
 
   @Test public void error() {
-    ResponseBody errorBody = ResponseBody.create(null, "Broken!");
+    MediaType plainText = MediaType.get("text/plain; charset=utf-8");
+    ResponseBody errorBody = ResponseBody.create(plainText, "Broken!");
     Response<?> response = Response.error(400, errorBody);
     assertThat(response.raw()).isNotNull();
+    assertThat(response.raw().body().contentType()).isEqualTo(plainText);
+    assertThat(response.raw().body().contentLength()).isEqualTo(7);
+    try {
+      response.raw().body().source();
+      fail();
+    } catch (IllegalStateException expected) {
+    }
     assertThat(response.code()).isEqualTo(400);
     assertThat(response.message()).isEqualTo("Response.error()");
     assertThat(response.headers().size()).isZero();

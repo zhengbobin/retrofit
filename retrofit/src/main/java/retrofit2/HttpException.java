@@ -15,12 +15,13 @@
  */
 package retrofit2;
 
-import static retrofit2.Utils.checkNotNull;
+import java.util.Objects;
+import javax.annotation.Nullable;
 
 /** Exception for an unexpected, non-2xx HTTP response. */
 public class HttpException extends RuntimeException {
   private static String getMessage(Response<?> response) {
-    checkNotNull(response, "response == null");
+    Objects.requireNonNull(response, "response == null");
     return "HTTP " + response.code() + " " + response.message();
   }
 
@@ -48,7 +49,7 @@ public class HttpException extends RuntimeException {
   /**
    * The full HTTP response. This may be null if the exception was serialized.
    */
-  public Response<?> response() {
+  public @Nullable Response<?> response() {
     return response;
   }
 }

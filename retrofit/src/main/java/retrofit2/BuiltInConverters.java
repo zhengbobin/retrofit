@@ -18,14 +18,18 @@ package retrofit2;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import javax.annotation.Nullable;
+import kotlin.Unit;
 import okhttp3.RequestBody;
 import okhttp3.ResponseBody;
 import retrofit2.http.Streaming;
 
 final class BuiltInConverters extends Converter.Factory {
-  @Override
-  public Converter<ResponseBody, ?> responseBodyConverter(Type type, Annotation[] annotations,
-      Retrofit retrofit) {
+  /** Not volatile because we don't mind multiple threads discovering this. */
+  private boolean checkForKotlinUnit = true;
+
+  @Override public @Nullable Converter<ResponseBody, ?> responseBodyConverter(
+      Type type, Annotation[] annotations, Retrofit retrofit) {
     if (type == ResponseBody.class) {
       return Utils.isAnnotationPresent(annotations, Streaming.class)
           ? StreamingResponseBodyConverter.INSTANCE
@@ -34,11 +38,19 @@ final class BuiltInConverters extends Converter.Factory {
     if (type == Void.class) {
       return VoidResponseBodyConverter.INSTANCE;
     }
+    if (checkForKotlinUnit) {
+      try {
+        if (type == Unit.class) {
+          return UnitResponseBodyConverter.INSTANCE;
+        }
+      } catch (NoClassDefFoundError ignored) {
+        checkForKotlinUnit = false;
+      }
+    }
     return null;
   }
 
-  @Override
-  public Converter<?, RequestBody> requestBodyConverter(Type type,
+  @Override public @Nullable Converter<?, RequestBody> requestBodyConverter(Type type,
       Annotation[] parameterAnnotations, Annotation[] methodAnnotations, Retrofit retrofit) {
     if (RequestBody.class.isAssignableFrom(Utils.getRawType(type))) {
       return RequestBodyConverter.INSTANCE;
@@ -49,16 +61,25 @@ final class BuiltInConverters extends Converter.Factory {
   static final class VoidResponseBodyConverter implements Converter<ResponseBody, Void> {
     static final VoidResponseBodyConverter INSTANCE = new VoidResponseBodyConverter();
 
-    @Override public Void convert(ResponseBody value) throws IOException {
+    @Override public Void convert(ResponseBody value) {
       value.close();
       return null;
+    }
+  }
+
+  static final class UnitResponseBodyConverter implements Converter<ResponseBody, Unit> {
+    static final UnitResponseBodyConverter INSTANCE = new UnitResponseBodyConverter();
+
+    @Override public Unit convert(ResponseBody value) {
+      value.close();
+      return Unit.INSTANCE;
     }
   }
 
   static final class RequestBodyConverter implements Converter<RequestBody, RequestBody> {
     static final RequestBodyConverter INSTANCE = new RequestBodyConverter();
 
-    @Override public RequestBody convert(RequestBody value) throws IOException {
+    @Override public RequestBody convert(RequestBody value) {
       return value;
     }
   }
@@ -67,7 +88,7 @@ final class BuiltInConverters extends Converter.Factory {
       implements Converter<ResponseBody, ResponseBody> {
     static final StreamingResponseBodyConverter INSTANCE = new StreamingResponseBodyConverter();
 
-    @Override public ResponseBody convert(ResponseBody value) throws IOException {
+    @Override public ResponseBody convert(ResponseBody value) {
       return value;
     }
   }

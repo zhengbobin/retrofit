@@ -16,6 +16,7 @@
 package retrofit2.mock;
 
 import java.io.IOException;
+import java.security.cert.CertificateException;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
@@ -155,6 +156,19 @@ public final class CallsTest {
     assertTrue(taco.isExecuted());
   }
 
+  @Test public void failureExecuteCheckedException() {
+    CertificateException failure = new CertificateException("Hey");
+    Call<Object> taco = Calls.failure(failure);
+    assertFalse(taco.isExecuted());
+    try {
+      taco.execute();
+      fail();
+    } catch (Throwable e) {
+      assertSame(failure, e);
+    }
+    assertTrue(taco.isExecuted());
+  }
+
   @Test public void failureEnqueue() {
     IOException failure = new IOException("Hey");
     Call<Object> taco = Calls.failure(failure);
@@ -228,10 +242,8 @@ public final class CallsTest {
 
   @Test public void deferredThrowExecute() throws IOException {
     final IOException failure = new IOException("Hey");
-    Call<Object> failing = Calls.defer(new Callable<Call<Object>>() {
-      @Override public Call<Object> call() throws Exception {
-        throw failure;
-      }
+    Call<Object> failing = Calls.defer(() -> {
+      throw failure;
     });
     try {
       failing.execute();
@@ -243,13 +255,26 @@ public final class CallsTest {
 
   @Test public void deferredThrowEnqueue() {
     final IOException failure = new IOException("Hey");
-    Call<Object> failing = Calls.defer(new Callable<Call<Object>>() {
-      @Override public Call<Object> call() throws Exception {
-        throw failure;
-      }
+    Call<Object> failing = Calls.defer(() -> {
+      throw failure;
     });
     final AtomicReference<Throwable> failureRef = new AtomicReference<>();
     failing.enqueue(new Callback<Object>() {
+      @Override public void onResponse(Call<Object> call, Response<Object> response) {
+        fail();
+      }
+
+      @Override public void onFailure(Call<Object> call, Throwable t) {
+        failureRef.set(t);
+      }
+    });
+    assertSame(failure, failureRef.get());
+  }
+
+  @Test public void deferredThrowUncheckedExceptionEnqueue() {
+    final RuntimeException failure = new RuntimeException("Hey");
+    final AtomicReference<Throwable> failureRef = new AtomicReference<>();
+    Calls.failure(failure).enqueue(new Callback<Object>() {
       @Override public void onResponse(Call<Object> call, Response<Object> response) {
         fail();
       }

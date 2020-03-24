@@ -1,6 +1,14 @@
 Simple XML Converter
 ====================
 
+Deprecated – Please switch to the JAXB Converter
+------------------------------------------------
+
+The Simple XML project is no longer maintained. We recommend switching to the
+[JAXB converter](https://github.com/square/retrofit/tree/master/retrofit-converters/jaxb).
+
+-----
+
 A `Converter` which uses [Simple][1] for XML serialization.
 
 A default `Serializer` instance will be created or one can be configured and passed to the
@@ -28,7 +36,7 @@ Download [the latest JAR][2] or grab via [Maven][3]:
 ```
 or [Gradle][3]:
 ```groovy
-compile 'com.squareup.retrofit2:converter-simplexml:latest.version'
+implementation 'com.squareup.retrofit2:converter-simplexml:latest.version'
 ```
 
 Snapshots of the development version are available in [Sonatype's `snapshots` repository][snap].

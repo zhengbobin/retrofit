@@ -20,6 +20,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.concurrent.Executor;
+import javax.annotation.Nullable;
 import retrofit2.Call;
 import retrofit2.CallAdapter;
 import retrofit2.Callback;
@@ -59,8 +60,8 @@ public final class ErrorHandlingAdapter {
   }
 
   public static class ErrorHandlingCallAdapterFactory extends CallAdapter.Factory {
-    @Override public CallAdapter<?, ?> get(Type returnType, Annotation[] annotations,
-        Retrofit retrofit) {
+    @Override public @Nullable CallAdapter<?, ?> get(
+        Type returnType, Annotation[] annotations, Retrofit retrofit) {
       if (getRawType(returnType) != MyCall.class) {
         return null;
       }
@@ -180,7 +181,7 @@ public final class ErrorHandlingAdapter {
       }
 
       @Override public void networkError(IOException e) {
-        System.err.println("NETOWRK ERROR " + e.getMessage());
+        System.err.println("NETWORK ERROR " + e.getMessage());
       }
 
       @Override public void unexpectedError(Throwable t) {

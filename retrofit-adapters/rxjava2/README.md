@@ -11,6 +11,33 @@ Available types:
  * `Maybe<T>`, `Maybe<Response<T>>`, and `Maybe<Result<T>>`  where `T` is the body type.
  * `Completable` where response bodies are discarded.
 
+
+Usage
+-----
+
+Add `RxJava2CallAdapterFactory` as a `Call` adapter when building your `Retrofit` instance:
+```java
+Retrofit retrofit = new Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
+    .build();
+```
+
+Your service methods can now use any of the above types as their return type.
+```java
+interface MyService {
+  @GET("/user")
+  Observable<User> getUser();
+}
+```
+
+By default all reactive types execute their requests synchronously. There are multiple ways to
+control the threading on which a request occurs:
+
+ * Call `subscribeOn` on the returned reactive type with a `Scheduler` of your choice.
+ * Use `createAsync()` when creating the factory which will use OkHttp's internal thread pool.
+ * Use `createWithScheduler(Scheduler)` to supply a default subscription `Scheduler`.
+
 Download
 --------
 
@@ -24,7 +51,7 @@ Download [the latest JAR][2] or grab via [Maven][3]:
 ```
 or [Gradle][3]:
 ```groovy
-compile 'com.squareup.retrofit2:adapter-rxjava2:latest.version'
+implementation 'com.squareup.retrofit2:adapter-rxjava2:latest.version'
 ```
 
 Snapshots of the development version are available in [Sonatype's `snapshots` repository][snap].

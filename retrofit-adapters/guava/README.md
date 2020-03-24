@@ -4,6 +4,26 @@ Guava Adapter
 An `Adapter` for adapting [Guava][1] `ListenableFuture`.
 
 
+Usage
+-----
+
+Add `GuavaCallAdapterFactory` as a `Call` adapter when building your `Retrofit` instance:
+```java
+Retrofit retrofit = new Retrofit.Builder()
+    .baseUrl("https://example.com/")
+    .addCallAdapterFactory(GuavaCallAdapterFactory.create())
+    .build();
+```
+
+Your service methods can now use `ListenableFuture` as their return type.
+```java
+interface MyService {
+  @GET("/user")
+  ListenableFuture<User> getUser();
+}
+```
+
+
 Download
 --------
 
@@ -17,7 +37,7 @@ Download [the latest JAR][2] or grab via [Maven][3]:
 ```
 or [Gradle][3]:
 ```groovy
-compile 'com.squareup.retrofit2:adapter-guava:latest.version'
+implementation 'com.squareup.retrofit2:adapter-guava:latest.version'
 ```
 
 Snapshots of the development version are available in [Sonatype's `snapshots` repository][snap].

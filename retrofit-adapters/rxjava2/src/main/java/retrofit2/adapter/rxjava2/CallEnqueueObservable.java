@@ -37,12 +37,15 @@ final class CallEnqueueObservable<T> extends Observable<Response<T>> {
     Call<T> call = originalCall.clone();
     CallCallback<T> callback = new CallCallback<>(call, observer);
     observer.onSubscribe(callback);
-    call.enqueue(callback);
+    if (!callback.isDisposed()) {
+      call.enqueue(callback);
+    }
   }
 
   private static final class CallCallback<T> implements Disposable, Callback<T> {
     private final Call<?> call;
     private final Observer<? super Response<T>> observer;
+    private volatile boolean disposed;
     boolean terminated = false;
 
     CallCallback(Call<?> call, Observer<? super Response<T>> observer) {
@@ -51,19 +54,20 @@ final class CallEnqueueObservable<T> extends Observable<Response<T>> {
     }
 
     @Override public void onResponse(Call<T> call, Response<T> response) {
-      if (call.isCanceled()) return;
+      if (disposed) return;
 
       try {
         observer.onNext(response);
 
-        if (!call.isCanceled()) {
+        if (!disposed) {
           terminated = true;
           observer.onComplete();
         }
       } catch (Throwable t) {
+        Exceptions.throwIfFatal(t);
         if (terminated) {
           RxJavaPlugins.onError(t);
-        } else if (!call.isCanceled()) {
+        } else if (!disposed) {
           try {
             observer.onError(t);
           } catch (Throwable inner) {
@@ -86,11 +90,12 @@ final class CallEnqueueObservable<T> extends Observable<Response<T>> {
     }
 
     @Override public void dispose() {
+      disposed = true;
       call.cancel();
     }
 
     @Override public boolean isDisposed() {
-      return call.isCanceled();
+      return disposed;
     }
   }
 }

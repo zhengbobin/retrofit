@@ -15,7 +15,6 @@
  */
 package retrofit.converter.java8;
 
-import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import okhttp3.ResponseBody;
@@ -24,12 +23,8 @@ import retrofit2.Retrofit;
 
 final class AlwaysNullConverterFactory extends Converter.Factory {
   @Override
-  public Converter<ResponseBody, ?> responseBodyConverter(Type type, Annotation[] annotations,
+  public Converter<ResponseBody, Object> responseBodyConverter(Type type, Annotation[] annotations,
       Retrofit retrofit) {
-    return new Converter<ResponseBody, Object>() {
-      @Override public Object convert(ResponseBody value) throws IOException {
-        return null;
-      }
-    };
+    return value -> null;
   }
 }

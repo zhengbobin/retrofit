@@ -16,7 +16,6 @@
 package retrofit2.converter.moshi;
 
 import com.squareup.moshi.FromJson;
-import com.squareup.moshi.JsonAdapter;
 import com.squareup.moshi.JsonDataException;
 import com.squareup.moshi.JsonQualifier;
 import com.squareup.moshi.JsonReader;
@@ -26,9 +25,7 @@ import com.squareup.moshi.ToJson;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.Retention;
-import java.lang.reflect.Type;
 import java.nio.charset.Charset;
-import java.util.Set;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -41,6 +38,7 @@ import retrofit2.Call;
 import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.http.Body;
+import retrofit2.http.GET;
 import retrofit2.http.POST;
 
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
@@ -69,6 +67,14 @@ public final class MoshiConverterFactoryTest {
 
     @Override public String getName() {
       return theName;
+    }
+  }
+
+  static final class Value {
+    final String theName;
+
+    Value(String theName) {
+      this.theName = theName;
     }
   }
 
@@ -106,11 +112,19 @@ public final class MoshiConverterFactoryTest {
       }
       throw new AssertionError("Found: " + string);
     }
+
+    @FromJson public Value readWithoutEndingObject(JsonReader reader) throws IOException {
+      reader.beginObject();
+      reader.skipName();
+      String theName = reader.nextString();
+      return new Value(theName);
+    }
   }
 
   interface Service {
     @POST("/") Call<AnImplementation> anImplementation(@Body AnImplementation impl);
     @POST("/") Call<AnInterface> anInterface(@Body AnInterface impl);
+    @GET("/") Call<Value> value();
 
     @POST("/") @Qualifier @NonQualifer //
     Call<String> annotations(@Body @Qualifier @NonQualifer String body);
@@ -125,16 +139,13 @@ public final class MoshiConverterFactoryTest {
 
   @Before public void setUp() {
     Moshi moshi = new Moshi.Builder()
-        .add(new JsonAdapter.Factory() {
-          @Override public JsonAdapter<?> create(Type type, Set<? extends Annotation> annotations,
-              Moshi moshi) {
-            for (Annotation annotation : annotations) {
-              if (!annotation.annotationType().isAnnotationPresent(JsonQualifier.class)) {
-                throw new AssertionError("Non-@JsonQualifier annotation: " + annotation);
-              }
+        .add((type, annotations, moshi1) -> {
+          for (Annotation annotation : annotations) {
+            if (!annotation.annotationType().isAnnotationPresent(JsonQualifier.class)) {
+              throw new AssertionError("Non-@JsonQualifier annotation: " + annotation);
             }
-            return null;
           }
+          return null;
         })
         .add(new Adapters())
         .build();
@@ -238,7 +249,7 @@ public final class MoshiConverterFactoryTest {
       call.execute();
       fail();
     } catch (JsonDataException e) {
-      assertThat(e).hasMessage("Cannot skip unexpected STRING at $.taco");
+      assertThat(e).hasMessage("Cannot skip unexpected NAME at $.");
     }
   }
 
@@ -267,6 +278,18 @@ public final class MoshiConverterFactoryTest {
       call.execute();
       fail();
     } catch (IOException expected) {
+    }
+  }
+
+  @Test public void requireFullResponseDocumentConsumption() throws Exception {
+    server.enqueue(new MockResponse().setBody("{\"theName\":\"value\"}"));
+
+    Call<Value> call = service.value();
+    try {
+      call.execute();
+      fail();
+    } catch (JsonDataException e) {
+      assertThat(e).hasMessage("JSON document was not fully consumed.");
     }
   }
 }
